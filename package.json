@@ -1,0 +1,28 @@
+{
+  "dependencies": {
+    "discord.js": "^14.15.3"
+  },
+  "name": "dicebot",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Comic's custom dice bot",
+  "main": "main.js",
+  "scripts": {
+    "start": "node --env-file=.env main.js",
+    "register": "node --env-file=.env register-commands.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChaunceyHoover/ComicDiceBot.git"
+  },
+  "keywords": [
+    "dice",
+    "discordjs"
+  ],
+  "author": "me :)",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ChaunceyHoover/ComicDiceBot/issues"
+  },
+  "homepage": "https://github.com/ChaunceyHoover/ComicDiceBot#readme"
+}
