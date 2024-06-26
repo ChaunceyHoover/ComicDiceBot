@@ -24,10 +24,20 @@ client.on('messageCreate', async message => {
     
     // Split message by each word said
     const words = message.content.split(/\s/);
+    let replyMsg = "";
 
     for (const indx in words) {
-        console.log(words[indx], parseDiceRoll(words[indx]));
+        let parsedResults = parseDiceRoll(words[indx]);
+        console.log(parsedResults);
+        if (parsedResults == null) continue;
+
+        for (const indx in parsedResults) {
+            const result = parsedResults[indx];
+            replyMsg += `\` ${result.result + (result.staticModifier ?? 0)} \` ⟵ [${result.rolls.join(", ")}] ${result.input}\n`;
+        }
     }
+
+    await message.channel.send(replyMsg);
 });
 
 client.login(process.env.DISCORD_TOKEN);

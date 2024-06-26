@@ -2,7 +2,7 @@
  * Generates a regex pattern to be executed against a given string of text to find matches for the dice rolling format
  * @returns A new regular expression for executing
  */
-const getDiceParsingRegex = () => /(?:(\d+)#)?(\d)([frt]{1})(?:(?:(kh)(\d+))|(?:(kl)(\d+)))?(?:([\+\-])?(\d+))?/g;
+const getDiceParsingRegex = () => /(?:(\d+)#)?(\d+)([frt]{1})(?:(?:(kh)(\d+))|(?:(kl)(\d+)))?(?:([\+\-])?(\d+))?/g;
 
 /**
  * Generates a random number between `min` and `max`, inclusive
@@ -34,43 +34,56 @@ const translateMatchToDiceModel = (regexMatch) => {
             highest: regexMatch[4] != null,
             count: parseInt(regexMatch[5] ?? regexMatch[7])
         },
-        staticModifier: regexMatch[8] == null ? null : {
-            amount: parseInt(`${regexMatch[8] == "+" ? "" : "-"}${regexMatch[9]}`)
-        }
+        staticModifier: regexMatch[8] == null ? null : parseInt(`${regexMatch[8] == "+" ? "" : "-"}${regexMatch[9]}`)
     };
 }
 
+
 /**
- * Calculates the total sum of all dice being rolled
- * @param {string} diceType A single letter representing the dice being rolled
- * @param {number} diceCount An integer representing how many dice are being rolled
- * @returns The result of the total number of dice of the given type added together
+ * Rolls a custom dice of a given type
+ * @param {string} diceType Lowercase letter representing the type of dice to roll
+ * @returns A number representing the result of the dice roll
  */
-const rollDiceByType = (diceType, diceCount) => {
+const rollDiceByType = (diceType) => {
     switch (diceType) {
         case 'f':
-            return diceCount * (getRandomInt(1, 12) - 6);  // d12 - 6
+            return getRandomInt(1, 12) - 6;  // d12 - 6
         case 'r':
-            return diceCount * (getRandomInt(1, 18) - 9);  // d18 - 9
+            return getRandomInt(1, 18) - 9;  // d18 - 9
         case 't':
-            return diceCount * (getRandomInt(1, 24) - 12); // d24 - 12
+            return getRandomInt(1, 24) - 12; // d24 - 12
         default:
             throw `Unknown dice type: [${diceType}]`;
     }
 }
 
+/**
+ * Returns an array containing the results of rolling the given dice type `diceCount` time(s)
+ * @param {string} diceType A single character representing the type of dice to roll
+ * @param {number} diceCount The amount of dice to roll
+ * @returns An array containing the result of every dice roll of the given dice type
+ */
 const calculateDiceRoll = (diceType, diceCount) => {
     const diceRolls = [];
     for (let i = 0; i < diceCount; i++) {
         diceRolls.push(
-            rollDiceByType(diceType, diceCount)
+            rollDiceByType(diceType)
         );
     }
-    return diceRolls.sort();
+    return diceRolls;
 }
 
-const createDiceResult = (result, rolls, staticModifier, input) => {
-    return { result, rolls, staticModifier, input };
+/**
+ * Maps data to a standardized model
+ * @param {number} result The sum of all the dice rolls
+ * @param {Array<number>} rolls Array of all the dice rolls
+ * @param {number} staticModifier The static amount to be added to the final result
+ * @param {boolean} isMultipleRolls Truthiness of if the result is multiple individual rolls or one single roll
+ * @param {string} input The original dice roll text
+ * @returns An object containing all of the passed parameters
+ */
+const createDiceResultModel = (result, rolls, staticModifier, isMultipleRolls, input) => {
+    return { result, rolls, staticModifier, isMultipleRolls, input };
 }
 
 /**
@@ -83,7 +96,7 @@ const parseDiceRoll = (word) => {
     const diceModel = translateMatchToDiceModel(getDiceParsingRegex().exec(word));
     const sum = (arr) => arr.reduce((a, b) => a + b);
 
-    if (diceModel == null) return;
+    if (diceModel == null) return null;
 
     // 1. Check for multiple dice roll (ex: 3#1f = 1f, 1f, 1f)
     if (diceModel.isMultipleRolls) {
@@ -94,25 +107,35 @@ const parseDiceRoll = (word) => {
         for (let i = 0; i < diceModel.multipleRollCount; i++) {
             const diceRolls = calculateDiceRoll(diceModel.diceType, diceModel.diceCount);
             rolls.push(
-                createDiceResult(sum(diceRolls), diceRolls, diceModel.staticModifier?.amount, word.substring(2))
+                createDiceResultModel(sum(diceRolls), diceRolls, diceModel.staticModifier, diceModel.isMultipleRolls, word.substring(2))
             );
         }
         return rolls;
     }
 
-    // 2. Check for dice rolling maths
+    // 2. Process individual dice roll by itself
+    const diceRoll = calculateDiceRoll(diceModel.diceType, diceModel.diceCount);
+    let totalRollsValue = [
+        createDiceResultModel(sum(diceRoll), diceRoll, diceModel.staticModifier, false, word)
+    ];
+
+    // 3. Check for dice maths (i.e. adding/subtracting multiple dice rolls together)
     if (diceModel.match != word) {
-        // TODO:
-        //  1. Process dice roll
-        //  2. Remove match from start of word
-        //  3. Check if first character of word is either '+' or '-'
-        //  4. Remove first character
-        //  5. Process remaining word and add/subtract from result
-        //  6. Repeat process recursively
+        let newWord = word.substring(diceModel.match.length);
+        let symbol = newWord.charAt(0);
+
+        let nextDiceRoll = parseDiceRoll(newWord.substring(1));
+        
+        if (nextDiceRoll.isMultipleRolls) return null; // cannot mix individual and multiple rolls
+
+        // Check if result is being added or subtracted
+        if (symbol == '-')
+            nextDiceRoll.result = nextDiceRoll.result * -1; 
+
+        totalRollsValue = totalRollsValue.concat(nextDiceRoll);
     }
 
-    // 3. Process normal, individual dice roll by itself
-    
+    return totalRollsValue;
 }
 
 export { parseDiceRoll }
