@@ -2,7 +2,7 @@
  * Generates a regex pattern to be executed against a given string of text to find matches for the dice rolling format
  * @returns A new regular expression for executing
  */
-const getDiceParsingRegex = () => /(\d+#)?(\d)([frt]{1})((?:kh\d+|kl\d+))?(?:([\+\-])?(\d+))?/g;
+const getDiceParsingRegex = () => /(?:(\d+)#)?(\d)([frt]{1})(?:(?:(kh)(\d+))|(?:(kl)(\d+)))?(?:([\+\-])?(\d+))?/g;
 
 /**
  * Generates a random number between `min` and `max`, inclusive
@@ -11,9 +11,9 @@ const getDiceParsingRegex = () => /(\d+#)?(\d)([frt]{1})((?:kh\d+|kl\d+))?(?:([\
  * @returns Random number between `min` and `max`, inclusive
  */
 const getRandomInt = (min, max) => {
-    const min = Math.ceil(min),
-          max = Math.floor(max);
-    return Math.floor(Math.random() * (max - min + 1) + min);
+    const minNum = Math.ceil(min),
+          maxNum = Math.floor(max);
+    return Math.floor(Math.random() * (maxNum - minNum + 1) + minNum);
 }
 
 /**
@@ -26,15 +26,16 @@ const translateMatchToDiceModel = (regexMatch) => {
 
     return {
         match: regexMatch[0],
-        diceCount: regexMatch[1],
-        isIndividualRolls: regexMatch[2] == undefined ? false : true,
+        isMultipleRolls: regexMatch[1] == undefined ? false : true,
+        multipleRollCount: regexMatch[1] == undefined ? undefined : parseInt(regexMatch[1]),
+        diceCount: regexMatch[2],
         diceType: regexMatch[3],
-        keepXDice: regexMatch[4] == null ? undefined : {
-            highest: regexMatch[4].substring(0, 2) == "kh",
-            count: parseInt(regexMatch[4].substring(2))
+        keepXDice: regexMatch[4] == null && regexMatch[6] == null ? undefined : {
+            highest: regexMatch[4] != null,
+            count: parseInt(regexMatch[5] ?? regexMatch[7])
         },
-        staticModifier: regexMatch[5] == null ? null : {
-            amount: parseInt(`${regexMatch[5] == "+" ? "" : "-"}${regexMatch[6]}`)
+        staticModifier: regexMatch[8] == null ? null : {
+            amount: parseInt(`${regexMatch[8] == "+" ? "" : "-"}${regexMatch[9]}`)
         }
     };
 }
@@ -58,34 +59,60 @@ const rollDiceByType = (diceType, diceCount) => {
     }
 }
 
-/**
- * Calculates each individual dice roll from a given `DiceModel` and returns each roll in an array 
- * @param {DiceModel} model The model to interpret
- * @returns A sorted array of numbers representing all the dice rolls from the model
- */
-const calculateModelValue = (model) => {
+const calculateDiceRoll = (diceType, diceCount) => {
     const diceRolls = [];
-    for (let i = 0; i < model.diceCount; i++) {
+    for (let i = 0; i < diceCount; i++) {
         diceRolls.push(
-            rollDiceByType(model.diceType, model.diceCount) + (model.staticModifier != null ? model.staticModifier.amount : 0)
+            rollDiceByType(diceType, diceCount)
         );
     }
-    
-
+    return diceRolls.sort();
 }
 
-const parseDiceRoll = (word) => {
-    const parsedMatch = translateMatchToDiceModel(getDiceParsingRegex().exec(word));
+const createDiceResult = (result, rolls, staticModifier, input) => {
+    return { result, rolls, staticModifier, input };
+}
 
-    if (parsedMatch.match != word) {
-        // TODO:
-        //  1. Remove match from start of word
-        //  2. Check if first character is either + or -
-        //  3. Remove first character 
-        //  4. Repeat process recursively with remaining string, return result from roll
+/**
+ * Translates a given dice roll if it matches the custom format and turns it into an appropriate number
+ * @param {string} word A single word from a message sent on Discord
+ * @returns A translated dice roll with the resulting value
+ */
+const parseDiceRoll = (word) => {
+    word = word.toLowerCase();
+    const diceModel = translateMatchToDiceModel(getDiceParsingRegex().exec(word));
+    const sum = (arr) => arr.reduce((a, b) => a + b);
+
+    if (diceModel == null) return;
+
+    // 1. Check for multiple dice roll (ex: 3#1f = 1f, 1f, 1f)
+    if (diceModel.isMultipleRolls) {
+        // 1.1. Make sure it's only an individual roll by itself (i.e. disallow 3#1f+4#1f)
+        if (diceModel.match != word) return;
+
+        const rolls = [];
+        for (let i = 0; i < diceModel.multipleRollCount; i++) {
+            const diceRolls = calculateDiceRoll(diceModel.diceType, diceModel.diceCount);
+            rolls.push(
+                createDiceResult(sum(diceRolls), diceRolls, diceModel.staticModifier?.amount, word.substring(2))
+            );
+        }
+        return rolls;
     }
 
-    const rolls = calculateModelValue(parsedMatch);
+    // 2. Check for dice rolling maths
+    if (diceModel.match != word) {
+        // TODO:
+        //  1. Process dice roll
+        //  2. Remove match from start of word
+        //  3. Check if first character of word is either '+' or '-'
+        //  4. Remove first character
+        //  5. Process remaining word and add/subtract from result
+        //  6. Repeat process recursively
+    }
+
+    // 3. Process normal, individual dice roll by itself
+    
 }
 
 export { parseDiceRoll }

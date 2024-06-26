@@ -26,7 +26,7 @@ client.on('messageCreate', async message => {
     const words = message.content.split(/\s/);
 
     for (const indx in words) {
-        console.log(words[indx], getDiceRoll(words[indx]));
+        console.log(words[indx], parseDiceRoll(words[indx]));
     }
 });
 
